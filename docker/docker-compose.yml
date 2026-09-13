@@ -1,7 +1,33 @@
-version: '3'
+# Run from the repository root:
+#   docker compose -f docker/docker-compose.yml up --build
+#
+# The build context is the repository root, so there is one copy of the code.
+# The old file bind-mounted ./app over /app, which shadowed everything baked
+# into the image and let the image and the running code drift apart.
 services:
   scraper:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    environment:
+      GMAPS_HEADLESS: "1"
+      # Listings to target per search term.
+      GMAPS_TOTAL: "25"
+      # Merge per-term workbooks into merged_output.xlsx at the end.
+      GMAPS_MERGE: "1"
+      # SFTP upload is off by default. To enable it, set GMAPS_UPLOAD=1 and
+      # supply credentials via the env_file below -- never in this file.
+      GMAPS_UPLOAD: "0"
+    # To configure SFTP upload, copy .env.example to docker/.env, fill it in,
+    # then uncomment the two lines below.
+    # env_file:
+    #   - .env
     volumes:
-      - ./app:/app
-    command: ["python", "run.py"]
+      # Results land on the host, so they survive the container.
+      - ../output:/app/output
+      # Mounted read-write: successfully scraped terms are removed from the
+      # queue, which is how an interrupted run resumes where it stopped.
+      - ../Query.txt:/app/Query.txt
+    # Chromium needs more than Docker's default 64MB of shared memory.
+    shm_size: "1gb"
+    restart: "no"

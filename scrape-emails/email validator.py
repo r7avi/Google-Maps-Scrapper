@@ -1,71 +1,139 @@
-import pandas as pd
+"""Flag the addresses in an 'Email' column as valid or invalid.
+
+Usage:
+    python "email validator.py"                  # file dialogs
+    python "email validator.py" in.csv out.xlsx  # no GUI needed
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
 import re
-import tkinter as tk
-from tkinter import filedialog, messagebox
+import sys
 
-# Function to validate email addresses
-def is_valid_email(email):
-    # Simple regex pattern for basic email validation
-    pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
-    return re.match(pattern, email) is not None
+import pandas as pd
 
-# Function to select a file and validate emails
-def validate_emails():
-    # Create a Tkinter root window (it will be hidden)
+# Rejects the cases the previous pattern (r'^[\w\.-]+@[\w\.-]+\.\w+$') allowed:
+# leading/trailing dots, consecutive dots, and a numeric-only TLD.
+_LOCAL = r"[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*"
+_LABEL = r"[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?"
+EMAIL_RE = re.compile(rf"^{_LOCAL}@(?:{_LABEL}\.)+[A-Za-z]{{2,}}$")
+
+MAX_EMAIL_LENGTH = 254  # RFC 5321
+
+
+def is_valid_email(value) -> bool:
+    """True when ``value`` looks like a single well-formed address.
+
+    Non-string input (notably the NaN that pandas puts in empty cells) returns
+    False instead of raising. The previous version passed NaN straight to
+    re.match, which raised TypeError and aborted the whole run.
+    """
+    if not isinstance(value, str):
+        return False
+    candidate = value.strip()
+    if not candidate or len(candidate) > MAX_EMAIL_LENGTH:
+        return False
+    return EMAIL_RE.match(candidate) is not None
+
+
+def load(path: str) -> pd.DataFrame:
+    lowered = path.lower()
+    if lowered.endswith(".csv"):
+        return pd.read_csv(path)
+    if lowered.endswith((".xlsx", ".xls")):
+        return pd.read_excel(path)
+    raise ValueError("Unsupported input format. Use a .csv, .xlsx or .xls file.")
+
+
+def save(frame: pd.DataFrame, path: str) -> None:
+    lowered = path.lower()
+    if lowered.endswith(".csv"):
+        frame.to_csv(path, index=False)
+    elif lowered.endswith((".xlsx", ".xls")):
+        frame.to_excel(path, index=False)
+    else:
+        raise ValueError("Unsupported output format. Use a .csv, .xlsx or .xls file.")
+
+
+def validate(input_path: str, output_path: str) -> int:
+    frame = load(input_path)
+    if "Email" not in frame.columns:
+        print("No 'Email' column found in the selected file.", file=sys.stderr)
+        return 2
+
+    # An 'Email' cell may hold several comma-separated addresses (that is what
+    # email-scrapper.py writes), so every address is checked.
+    def row_valid(value) -> bool:
+        if not isinstance(value, str):
+            return False
+        parts = [part for part in (p.strip() for p in value.split(",")) if part]
+        return bool(parts) and all(is_valid_email(part) for part in parts)
+
+    frame["Valid"] = frame["Email"].map(row_valid)
+    save(frame, output_path)
+
+    valid_count = int(frame["Valid"].sum())
+    print(f"{valid_count} of {len(frame)} row(s) valid. Saved to {output_path}")
+    return 0
+
+
+def prompt_paths() -> "tuple[str | None, str | None]":
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except ImportError:
+        print("tkinter is unavailable. Pass input and output paths as arguments.",
+              file=sys.stderr)
+        return None, None
+
     root = tk.Tk()
     root.withdraw()
-    
-    # Open file dialog to select the file (CSV or Excel)
-    file_path = filedialog.askopenfilename(
-        title="Select a file",
-        filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx;*.xls")]
-    )
-    
-    if not file_path:
-        messagebox.showinfo("No file selected", "No file was selected. Exiting.")
-        return
-    
     try:
-        # Determine file type and read the file into a DataFrame
-        if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
-        elif file_path.endswith(('.xlsx', '.xls')):
-            df = pd.read_excel(file_path)
-        else:
-            raise ValueError("Unsupported file format. Please select a CSV or Excel file.")
-
-        # Check if 'Email' column exists
-        if 'Email' not in df.columns:
-            messagebox.showerror("Column Not Found", "No 'Email' column found in the selected file.")
-            return
-
-        # Validate emails
-        df['Valid'] = df['Email'].apply(is_valid_email)
-        
-        # Open file dialog to save the results (CSV or Excel)
-        output_file = filedialog.asksaveasfilename(
+        source = filedialog.askopenfilename(
+            title="Select a file",
+            filetypes=[("CSV files", "*.csv"), ("Excel files", "*.xlsx *.xls")],
+        )
+        if not source:
+            return None, None
+        target = filedialog.asksaveasfilename(
+            title="Save validated emails as",
             defaultextension=".xlsx",
             filetypes=[("Excel files", "*.xlsx"), ("CSV files", "*.csv")],
-            title="Save validated emails as"
         )
-        
-        if not output_file:
-            messagebox.showinfo("No output file", "No output file specified. Exiting.")
-            return
-        
-        # Save results to the selected file format
-        if output_file.endswith('.csv'):
-            df.to_csv(output_file, index=False)
-        elif output_file.endswith(('.xlsx', '.xls')):
-            df.to_excel(output_file, index=False)
-        else:
-            raise ValueError("Unsupported file format for saving. Please select an Excel or CSV file.")
+        return source, (target or None)
+    finally:
+        root.destroy()
 
-        messagebox.showinfo("Success", f"Validated emails saved to {output_file}")
-    
-    except Exception as e:
-        messagebox.showerror("Error", f"An error occurred: {e}")
-        print(f"An error occurred: {e}")
 
-# Run the function
-validate_emails()
+def main(argv: "list[str] | None" = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Mark each row's Email value as valid or invalid."
+    )
+    parser.add_argument("input", nargs="?", help="Input .csv/.xlsx (prompts if omitted).")
+    parser.add_argument("output", nargs="?", help="Output .csv/.xlsx.")
+    args = parser.parse_args(argv)
+
+    input_path, output_path = args.input, args.output
+    if not input_path:
+        input_path, output_path = prompt_paths()
+    if not input_path:
+        print("No input file selected.", file=sys.stderr)
+        return 2
+    if not os.path.exists(input_path):
+        print(f"{input_path} does not exist.", file=sys.stderr)
+        return 2
+    if not output_path:
+        base, ext = os.path.splitext(input_path)
+        output_path = f"{base}_validated{ext or '.xlsx'}"
+
+    try:
+        return validate(input_path, output_path)
+    except Exception as exc:
+        print(f"An error occurred: {exc}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,10 +1,32 @@
-#Ignore
-Scrapped/
 __pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets -- never commit these
+.env
+docker/.env
+*.pem
+known_hosts
+
+# Logs
+*.log
+error_log.txt
+error_log.log
+scraper.log
+failed_links.log
+
+# Scraped output. The repository previously tracked output/*.xlsx, which meant
+# every clone merged the author's old results into its first merged_output.xlsx.
+output/
+docker/app/output/
+
+# Local scratch
+Scrapped/
 Data/
 Clean Data/
 docker/upload
-
-error_log.txt
-error_log.log
 upload.py

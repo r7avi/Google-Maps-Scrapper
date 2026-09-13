@@ -1,51 +1,41 @@
-# Use the official Python image as a base
-FROM python:3.10-slim
+# Build context is the repository root so the container runs the same modules
+# as a local checkout:
+#   docker compose -f docker/docker-compose.yml up --build
+#
+# The previous image installed google-chrome-stable via the deprecated
+# `apt-key add` AND downloaded Playwright's Chromium, shipping two browser
+# engines when the scraper uses one. It also hand-maintained a list of apt
+# packages that breaks on newer Debian (libasound2 was renamed).
+# `playwright install --with-deps chromium` resolves those system libraries
+# itself, for the exact browser build the pinned Playwright expects.
+FROM python:3.12-slim
 
-# Install necessary dependencies and Chrome browser
-RUN apt-get update && apt-get install -y \
-    curl \
-    unzip \
-    libnss3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdbus-1-3 \
-    libdrm2 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxrandr2 \
-    libgbm-dev \
-    libxkbcommon0 \
-    libasound2 \
-    libpangocairo-1.0-0 \
-    libgtk-3-0 \
-    fonts-liberation \
-    libappindicator3-1 \
-    libxshmfence1 \
-    libu2f-udev \
-    xdg-utils \
-    wget \
-    gnupg \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
-# Install Chrome browser
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list' && \
-    apt-get update && apt-get install -y google-chrome-stable
-
-# Install Python dependencies
-COPY app/requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r /app/requirements.txt
-
-# Install Playwright dependencies and browsers
-RUN playwright install
-
-# Set the working directory
 WORKDIR /app
 
-# Copy the application code into the container
-COPY app/ /app/
+COPY requirements.txt ./
+RUN python -m pip install --upgrade pip \
+    && pip install -r requirements.txt \
+    && playwright install --with-deps chromium
 
-# Command to run the script
-CMD ["python", "run.py"]
+# Application modules, shared with the local (non-Docker) workflow.
+COPY config.py models.py playwright_helpers.py scraper.py utils.py uploader.py run.py ./
+COPY Query.txt ./
+
+# Run as an unprivileged user rather than root.
+RUN useradd --create-home --uid 10001 scraper \
+    && mkdir -p /app/output \
+    && chown -R scraper:scraper /app \
+    && chmod -R a+rX /ms-playwright
+USER scraper
+
+ENV GMAPS_HEADLESS=1 \
+    GMAPS_OUTPUT_DIR=/app/output \
+    GMAPS_QUERY_FILE=/app/Query.txt
+
+CMD ["python", "run.py", "--non-interactive"]

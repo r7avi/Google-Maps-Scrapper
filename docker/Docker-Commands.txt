@@ -1,62 +1,80 @@
-## Bash Command , Copy and Paste below Bash code in ubuntu 22.04 to Install Docker and Composer :
+## Install Docker Engine + Compose plugin on Ubuntu (22.04 / 24.04)
+##
+## Note: `apt-key add` is deprecated and removed in current releases. These
+## commands use a signed keyring in /etc/apt/keyrings instead. The Compose
+## plugin is installed from apt, so there is no separate docker-compose binary
+## to download -- use `docker compose` (a subcommand, no hyphen).
 
 sudo apt-get update && \
-sudo apt-get install apt-transport-https ca-certificates curl software-properties-common -y && \
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add - && \
-sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" && \
+sudo apt-get install -y ca-certificates curl && \
+sudo install -m 0755 -d /etc/apt/keyrings && \
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc && \
+sudo chmod a+r /etc/apt/keyrings/docker.asc && \
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null && \
 sudo apt-get update && \
-sudo apt-get install docker-ce -y && \
-sudo curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose && \
-sudo chmod +x /usr/local/bin/docker-compose
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 
-## Manual Installation Commands
+## Step by step
 
-1. Uninstall Old Versions (If you have any old versions of Docker installed, remove them first) :
-sudo apt-get remove docker docker-engine docker.io containerd runc
+1. Remove any distro-packaged Docker first:
+sudo apt-get remove -y docker docker-engine docker.io containerd runc
 
-2. Update the Package Index
+2. Update the package index:
 sudo apt-get update
 
-3. Install Prerequisites
-Install packages to allow apt to use a repository over HTTPS:
-sudo apt-get install apt-transport-https ca-certificates curl software-properties-common
+3. Install the prerequisites:
+sudo apt-get install -y ca-certificates curl
 
-4. Add Docker's Official GPG Key
-Add Docker's official GPG key for the repository:
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+4. Add Docker's GPG key to a keyring file:
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
 
-5. Add Docker Repository (Add the Docker repository to your APT sources):
-sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+5. Add the repository, referencing that keyring:
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-6. Update the Package Index Again
+6. Update the package index again:
 sudo apt-get update
 
-7. Install Docker
-Install the Docker CE (Community Edition):
-sudo apt-get install docker-ce
+7. Install Docker and the Compose plugin:
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
-8. Verify Docker Installation & Check that Docker is installed and running:
+8. Check the service is running:
 sudo systemctl status docker
 
-9. You can also verify the Docker version:
+9. Check the versions:
 docker --version
+docker compose version
 
-10.Install Docker Compose (Docker Compose is a tool for defining and running multi-container Docker applications) To install it:
-
-first command :
-sudo curl -L "https://github.com/docker/compose/releases/download/$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | cut -d '"' -f 4)/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-
-second command :
-sudo chmod +x /usr/local/bin/docker-compose
-
-
-11. Verify Docker Compose installation:
-docker-compose --version
+10. Optional -- run docker without sudo (log out and back in afterwards):
+sudo usermod -aG docker $USER
 
 =======================================================================
 
   
+## Running this scraper
+##
+## The build context is the repository root, so run these from the repo root
+## (not from inside docker/):
+
+Build and run:
+docker compose -f docker/docker-compose.yml up --build
+
+Run with a different result target:
+GMAPS_TOTAL=50 docker compose -f docker/docker-compose.yml up --build
+
+Follow the logs:
+docker compose -f docker/docker-compose.yml logs -f
+
+Stop and remove:
+docker compose -f docker/docker-compose.yml down
+
+Results are written to ./output on the host. Terms are removed from ./Query.txt
+as they succeed, so re-running resumes where the previous run stopped.
+
+
 ## Docker Instance Manage :
 
 List all Docker images:
@@ -71,14 +89,11 @@ docker stop <container_id>
 Remove a stopped container:
 docker rm <container_id>
 
-Docker build via docker-compose.yml : 
-docker-compose up --build
-
 Remove a Docker image:
 docker rmi <image_id>
 
-Delete all Containers : 
-docker-compose down --rmi all
+Remove the containers and images built by compose :
+docker compose -f docker/docker-compose.yml down --rmi all
 
 Stop all running Docker containers :
 docker stop $(docker ps -q)

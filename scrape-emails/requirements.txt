@@ -1,4 +1,13 @@
-pandas==2.1.2
-playwright==1.37.0
-lxml==4.9.3
-tk==0.1.0
+# Direct dependencies only, upper-bounded at the next major version.
+#
+# 'tk==0.1.0' was removed: it is an unrelated placeholder package on PyPI, not
+# the tkinter GUI toolkit. tkinter ships with CPython (on Debian/Ubuntu install
+# the python3-tk system package). The scraper also accepts the CSV path as a
+# command-line argument, so no GUI is required.
+
+playwright>=1.55,<2
+pandas>=2.2,<4
+lxml>=5.2,<7
+
+# After installing, download the browser:
+#   playwright install chromium

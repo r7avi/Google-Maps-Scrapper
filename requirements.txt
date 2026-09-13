@@ -1,13 +1,18 @@
-tqdm
-et-xmlfile==1.1.0
-greenlet==2.0.1
-numpy
-openpyxl==3.1.1
-pandas
-playwright==1.33.0
-pyee==9.0.4
-python-dateutil==2.8.2
-pytz==2022.7.1
-six==1.16.0
-typing_extensions==4.5.0
-paramiko==3.0.0
+# Direct dependencies only, with an upper bound at the next major version.
+#
+# The previous file pinned 2022-era transitive packages (et-xmlfile, greenlet,
+# pyee, python-dateutil, pytz, six, typing_extensions) while leaving the direct
+# ones (pandas, numpy) unbounded -- the opposite of what you want. greenlet
+# 2.0.1 in particular has no wheels for Python 3.12+ and fails to build there,
+# and playwright 1.33.0 (May 2023) ships a Chromium far behind current Google
+# Maps. Transitive versions are now resolved by pip.
+#
+# Requires Python 3.10 or newer.
+
+playwright>=1.55,<2
+pandas>=2.2,<4
+openpyxl>=3.1.5,<4
+tqdm>=4.66,<5
+
+# After installing, download the browser:
+#   playwright install chromium

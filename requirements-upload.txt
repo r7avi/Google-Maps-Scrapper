@@ -1,0 +1,4 @@
+# Only needed for the optional SFTP upload (run.py --upload / GMAPS_UPLOAD=1).
+# uploader.py imports paramiko lazily, so the scraper works without this.
+-r requirements.txt
+paramiko>=3.4,<6

@@ -1,0 +1,23 @@
+.git
+.github
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Scraped results and logs must not be baked into the image.
+output/
+docker/app/output/
+*.xlsx
+*.log
+
+# Secrets
+.env
+docker/.env
+
+scrape-emails/
+build/
+README.md
+LICENSE
+CODE_OF_CONDUCT.md
+SECURITY.md
